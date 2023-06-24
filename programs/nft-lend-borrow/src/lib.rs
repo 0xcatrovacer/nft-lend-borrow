@@ -17,6 +17,38 @@ declare_id!("DZSXK8Tvqo4vGqhW9mGjFuWX5XFcPGoJ5daJhMhxLFuK");
 #[program]
 pub mod nft_lend_borrow {
     use super::*;
+
+    pub fn create_pool(
+        ctx: Context<CreatePool>,
+        collection_id: Pubkey,
+        duration: u64,
+    ) -> Result<()> {
+        let collection = &mut ctx.accounts.collection_pool;
+
+        collection.collection_id = collection_id;
+        collection.pool_owner = ctx.accounts.authority.key();
+        collection.duration = duration;
+
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+#[instruction(collection_id: Pubkey)]
+pub struct CreatePool<'info> {
+    #[account(
+        init,
+        seeds=[b"collection_pool", collection_id.to_string().as_bytes()],
+        bump,
+        payer=authority,
+        space=CollectionPool::LEN
+    )]
+    pub collection_pool: Box<Account<'info, CollectionPool>>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 #[account]
@@ -24,20 +56,17 @@ pub struct CollectionPool {
     /// NFT Collection ID
     pub collection_id: Pubkey,
 
-    /// Switchboard Feed Aggregator
-    pub switchboard_aggregator: Pubkey,
-
     /// Pool Owner
     pub pool_owner: Pubkey,
-
-    /// Coefficient to calculate quote prices
-    pub quote_coefficient: u64,
 
     /// Loan Duration
     pub duration: u64,
 }
 
-#[account]
+impl CollectionPool {
+    pub const LEN: usize = 8 + 32 + 32 + 8;
+}
+
 pub struct Offer {
     /// Collection
     pub collection: Pubkey,
