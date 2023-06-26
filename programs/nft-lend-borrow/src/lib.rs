@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, SetAuthority, Token, TokenAccount, Transfer, CloseAccount};
+use anchor_spl::token::{self, CloseAccount, SetAuthority, Token, TokenAccount, Transfer};
 
 declare_id!("DZSXK8Tvqo4vGqhW9mGjFuWX5XFcPGoJ5daJhMhxLFuK");
 
@@ -15,7 +15,6 @@ declare_id!("DZSXK8Tvqo4vGqhW9mGjFuWX5XFcPGoJ5daJhMhxLFuK");
 /// borrow
 /// repay
 /// liquidate
-
 
 #[program]
 pub mod nft_lend_borrow {
@@ -38,7 +37,11 @@ pub mod nft_lend_borrow {
         Ok(())
     }
 
-    pub fn offer_loan(ctx: Context<OfferLoan>, offer_amount: u64, _collection_id: Pubkey) -> Result<()> {
+    pub fn offer_loan(
+        ctx: Context<OfferLoan>,
+        offer_amount: u64,
+        _collection_id: Pubkey,
+    ) -> Result<()> {
         let offer_account = &mut ctx.accounts.offer_loan;
         let collection = &mut ctx.accounts.collection_pool;
 
@@ -103,9 +106,18 @@ pub mod nft_lend_borrow {
 
         let authority_seeds = &[authority_seeds_1, authority_seeds_2];
 
-        token::transfer(ctx.accounts.transfer_to_lender_context().with_signer(&authority_seeds[..]), ctx.accounts.offer_token_account.amount)?;
+        token::transfer(
+            ctx.accounts
+                .transfer_to_lender_context()
+                .with_signer(&authority_seeds[..]),
+            ctx.accounts.offer_token_account.amount,
+        )?;
 
-        token::close_account(ctx.accounts.close_account_context().with_signer(&authority_seeds[..]))?;
+        token::close_account(
+            ctx.accounts
+                .close_account_context()
+                .with_signer(&authority_seeds[..]),
+        )?;
 
         Ok(())
     }
@@ -269,7 +281,7 @@ pub struct CollectionPool {
     pub total_offers: u64,
 
     /// Bump
-    pub bump: u8
+    pub bump: u8,
 }
 
 impl CollectionPool {
@@ -294,7 +306,7 @@ pub struct Offer {
     pub borrower: Pubkey,
 
     /// Bump
-    pub bump: u8
+    pub bump: u8,
 }
 
 impl Offer {
