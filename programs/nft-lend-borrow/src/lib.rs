@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, SetAuthority, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, SetAuthority, Token, TokenAccount, Transfer, CloseAccount};
 
 declare_id!("DZSXK8Tvqo4vGqhW9mGjFuWX5XFcPGoJ5daJhMhxLFuK");
 
@@ -15,6 +15,7 @@ declare_id!("DZSXK8Tvqo4vGqhW9mGjFuWX5XFcPGoJ5daJhMhxLFuK");
 /// borrow
 /// repay
 /// liquidate
+
 
 #[program]
 pub mod nft_lend_borrow {
@@ -37,7 +38,7 @@ pub mod nft_lend_borrow {
         Ok(())
     }
 
-    pub fn offer_loan(ctx: Context<OfferLoan>, offer_amount: u64) -> Result<()> {
+    pub fn offer_loan(ctx: Context<OfferLoan>, offer_amount: u64, _collection_id: Pubkey) -> Result<()> {
         let offer_account = &mut ctx.accounts.offer_loan;
         let collection = &mut ctx.accounts.collection_pool;
 
@@ -67,6 +68,47 @@ pub mod nft_lend_borrow {
 
         Ok(())
     }
+
+    pub fn withdraw_offer(ctx: Context<WithdrawOffer>, _collection_id: Pubkey) -> Result<()> {
+        let collection = &mut ctx.accounts.collection_pool;
+
+        collection.total_offers -= 1;
+
+        let (_token_account_authority, token_account_bump) = Pubkey::find_program_address(
+            &[
+                b"offer-token-account",
+                collection.key().as_ref(),
+                ctx.accounts.lender.key().as_ref(),
+                collection.total_offers.to_string().as_bytes(),
+            ],
+            ctx.program_id,
+        );
+
+        let key = collection.key();
+        let lender = ctx.accounts.lender.key();
+        let offer_bytes = collection.total_offers.to_string();
+
+        let collection_key: &[u8] = key.as_ref().try_into().expect("");
+        let lender_key: &[u8] = lender.as_ref().try_into().expect("");
+        let total_offers_bytes: &[u8] = offer_bytes.as_bytes().try_into().expect("");
+
+        let authority_seeds_1: &[&[u8]] = &[
+            b"offer-token-account",
+            collection_key,
+            lender_key,
+            total_offers_bytes,
+        ];
+
+        let authority_seeds_2: &[&[u8]] = &[&[token_account_bump]];
+
+        let authority_seeds = &[authority_seeds_1, authority_seeds_2];
+
+        token::transfer(ctx.accounts.transfer_to_lender_context().with_signer(&authority_seeds[..]), ctx.accounts.offer_token_account.amount)?;
+
+        token::close_account(ctx.accounts.close_account_context().with_signer(&authority_seeds[..]))?;
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -88,6 +130,7 @@ pub struct CreatePool<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(collection_id: Pubkey)]
 pub struct OfferLoan<'info> {
     #[account(
         init,
@@ -113,7 +156,11 @@ pub struct OfferLoan<'info> {
     )]
     pub lender_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds=[b"collection_pool", collection_id.key().as_ref()],
+        bump=collection_pool.bump
+    )]
     pub collection_pool: Box<Account<'info, CollectionPool>>,
 
     #[account(mut)]
@@ -145,6 +192,68 @@ impl<'info> OfferLoan<'info> {
     }
 }
 
+#[derive(Accounts)]
+#[instruction(collection_id: Pubkey)]
+pub struct WithdrawOffer<'info> {
+    #[account(
+        mut,
+        seeds=[b"offer", collection_pool.key().as_ref(), lender.key().as_ref(), collection_pool.total_offers.to_string().as_bytes()],
+        bump=offer_loan.bump,
+        close=lender,
+    )]
+    pub offer_loan: Box<Account<'info, Offer>>,
+
+    #[account(
+        mut,
+        seeds = [b"offer-token-account", collection_pool.key().as_ref(), lender.key().as_ref(), collection_pool.total_offers.to_string().as_bytes()],
+        bump=offer_loan.bump,
+    )]
+    pub offer_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds=[b"collection_pool", collection_id.key().as_ref()],
+        bump=collection_pool.bump
+    )]
+    pub collection_pool: Box<Account<'info, CollectionPool>>,
+
+    #[account(mut)]
+    pub lender: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = lender_token_account.owner == *lender.key
+    )]
+    pub lender_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: This is not dangerous
+    pub token_account_authority: AccountInfo<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+impl<'info> WithdrawOffer<'info> {
+    fn transfer_to_lender_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+        let cpi_accounts = Transfer {
+            from: self.offer_token_account.to_account_info().clone(),
+            to: self.lender_token_account.to_account_info().clone(),
+            authority: self.lender.to_account_info().clone(),
+        };
+
+        CpiContext::new(self.token_program.to_account_info().clone(), cpi_accounts)
+    }
+
+    fn close_account_context(&self) -> CpiContext<'_, '_, '_, 'info, CloseAccount<'info>> {
+        let cpi_accounts = CloseAccount {
+            account: self.offer_token_account.to_account_info().clone(),
+            destination: self.lender.to_account_info().clone(),
+            authority: self.token_account_authority.clone(),
+        };
+
+        CpiContext::new(self.token_program.to_account_info().clone(), cpi_accounts)
+    }
+}
+
 #[account]
 pub struct CollectionPool {
     /// NFT Collection ID
@@ -158,10 +267,13 @@ pub struct CollectionPool {
 
     /// Total Loans
     pub total_offers: u64,
+
+    /// Bump
+    pub bump: u8
 }
 
 impl CollectionPool {
-    pub const LEN: usize = 8 + 32 + 32 + 8 + 8;
+    pub const LEN: usize = 8 + 32 + 32 + 8 + 8 + 1;
 }
 
 #[account]
@@ -180,10 +292,13 @@ pub struct Offer {
 
     /// Borrower
     pub borrower: Pubkey,
+
+    /// Bump
+    pub bump: u8
 }
 
 impl Offer {
-    pub const LEN: usize = 8 + 32 + 8 + 1 + 32;
+    pub const LEN: usize = 8 + 32 + 8 + 1 + 32 + 1;
 }
 
 #[account]
