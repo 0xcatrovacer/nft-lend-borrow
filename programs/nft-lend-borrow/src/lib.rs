@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, CloseAccount, SetAuthority, Token, TokenAccount, Transfer};
+use anchor_spl::token::{
+    self, spl_token::instruction::AuthorityType, CloseAccount, SetAuthority, Token, TokenAccount,
+    Transfer,
+};
 
 declare_id!("DZSXK8Tvqo4vGqhW9mGjFuWX5XFcPGoJ5daJhMhxLFuK");
 
@@ -18,7 +21,6 @@ declare_id!("DZSXK8Tvqo4vGqhW9mGjFuWX5XFcPGoJ5daJhMhxLFuK");
 
 #[program]
 pub mod nft_lend_borrow {
-    use anchor_spl::token::spl_token::instruction::AuthorityType;
 
     use super::*;
 
@@ -74,6 +76,10 @@ pub mod nft_lend_borrow {
 
     pub fn withdraw_offer(ctx: Context<WithdrawOffer>, _collection_id: Pubkey) -> Result<()> {
         let collection = &mut ctx.accounts.collection_pool;
+
+        if ctx.accounts.offer_loan.is_loan_taken == true {
+            return Err(ErrorCode::LoanAlreadyTaken.into());
+        }
 
         collection.total_offers -= 1;
 
@@ -191,7 +197,7 @@ impl<'info> OfferLoan<'info> {
             authority: self.lender.to_account_info().clone(),
         };
 
-        CpiContext::new(self.token_program.to_account_info().clone(), cpi_accounts)
+        CpiContext::new(self.system_program.to_account_info().clone(), cpi_accounts)
     }
 
     fn set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
@@ -338,4 +344,10 @@ pub struct ActiveLoan {
 
     /// Liquidated
     pub is_liquidated: bool,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Loan Already Taken")]
+    LoanAlreadyTaken,
 }
