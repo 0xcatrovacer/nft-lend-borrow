@@ -61,9 +61,9 @@ pub mod nft_lend_borrow {
             ctx.accounts.set_authority_context(),
             AuthorityType::AccountOwner,
             Some(offer_account_authority),
-        );
+        )?;
 
-        token::transfer(ctx.accounts.transfer_to_vault_context(), offer_amount);
+        token::transfer(ctx.accounts.transfer_to_vault_context(), offer_amount)?;
 
         Ok(())
     }
@@ -74,7 +74,7 @@ pub mod nft_lend_borrow {
 pub struct CreatePool<'info> {
     #[account(
         init,
-        seeds=[b"collection_pool", collection_id.to_string().as_bytes()],
+        seeds=[b"collection_pool", collection_id.key().as_ref()],
         bump,
         payer=authority,
         space=CollectionPool::LEN
