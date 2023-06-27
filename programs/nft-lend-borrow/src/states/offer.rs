@@ -8,6 +8,9 @@ pub struct Offer {
     /// Offer Amount
     pub offer_lamport_amount: u64,
 
+    /// Repay Amount
+    pub repay_lamport_amount: u64,
+
     /// Lender
     pub lender: Pubkey,
 
@@ -22,5 +25,5 @@ pub struct Offer {
 }
 
 impl Offer {
-    pub const LEN: usize = 8 + 32 + 8 + 1 + 32 + 1;
+    pub const LEN: usize = 8 + 32 + 8 + 8 + 1 + 32 + 1;
 }

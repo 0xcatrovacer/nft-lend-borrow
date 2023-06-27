@@ -1,7 +1,8 @@
 pub use anchor_lang::prelude::*;
 
+use anchor_lang::system_program;
 use anchor_spl::token::{
-    self, spl_token::instruction::AuthorityType, SetAuthority, Token, TokenAccount, Transfer,
+    self, spl_token::instruction::AuthorityType, SetAuthority, Token, TokenAccount,
 };
 
 pub use crate::states::{CollectionPool, Offer};
@@ -57,11 +58,12 @@ pub struct OfferLoan<'info> {
 }
 
 impl<'info> OfferLoan<'info> {
-    fn transfer_to_vault_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
-        let cpi_accounts = Transfer {
+    fn transfer_to_vault_context(
+        &self,
+    ) -> CpiContext<'_, '_, '_, 'info, system_program::Transfer<'info>> {
+        let cpi_accounts = system_program::Transfer {
             from: self.lender.to_account_info().clone(),
             to: self.offer_token_account.to_account_info().clone(),
-            authority: self.lender.to_account_info().clone(),
         };
 
         CpiContext::new(self.system_program.to_account_info().clone(), cpi_accounts)
@@ -83,6 +85,7 @@ pub fn handler(ctx: Context<OfferLoan>, offer_amount: u64, _collection_id: Pubke
 
     offer_account.collection = collection.key();
     offer_account.offer_lamport_amount = offer_amount;
+    offer_account.repay_lamport_amount = offer_amount + offer_amount * 10 / 100;
     offer_account.lender = ctx.accounts.lender.key();
     offer_account.bump = *ctx.bumps.get("offer_loan").unwrap();
 
@@ -104,7 +107,7 @@ pub fn handler(ctx: Context<OfferLoan>, offer_amount: u64, _collection_id: Pubke
         Some(offer_account_authority),
     )?;
 
-    token::transfer(ctx.accounts.transfer_to_vault_context(), offer_amount)?;
+    system_program::transfer(ctx.accounts.transfer_to_vault_context(), offer_amount)?;
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 pub use anchor_lang::prelude::*;
 
+use anchor_lang::system_program;
 use anchor_spl::token::spl_token::instruction::AuthorityType;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer, Mint, SetAuthority};
 
@@ -74,9 +75,6 @@ pub struct Borrow<'info> {
     #[account(mut)]
     pub asset_mint: Account<'info, Mint>,
 
-    /// CHECK: This is not dangerous
-    pub token_account_authority: AccountInfo<'info>,
-
     pub token_program: Program<'info, Token>,
 
     pub system_program: Program<'info, System>,
@@ -85,14 +83,13 @@ pub struct Borrow<'info> {
 }
 
 impl<'info> Borrow<'info> {
-    fn transfer_to_borrower_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
-        let cpi_accounts = Transfer {
+    fn transfer_to_borrower_context(&self) -> CpiContext<'_, '_, '_, 'info, system_program::Transfer<'info>> {
+        let cpi_accounts = system_program::Transfer {
             from: self.offer_token_account.to_account_info().clone(),
             to: self.borrower.to_account_info().clone(),
-            authority: self.token_account_authority.to_account_info().clone(),
         };
 
-        CpiContext::new(self.token_program.to_account_info().clone(), cpi_accounts)
+        CpiContext::new(self.system_program.to_account_info().clone(), cpi_accounts)
     }
 
     fn transfer_to_vault_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
@@ -193,7 +190,7 @@ impl<'info> Borrow<'info> {
 
         token::transfer(ctx.accounts.transfer_to_vault_context(), 1)?;
 
-        token::transfer(
+        system_program::transfer(
             ctx.accounts
                 .transfer_to_borrower_context()
                 .with_signer(&authority_seeds[..]),
