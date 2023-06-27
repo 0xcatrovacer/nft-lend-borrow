@@ -53,7 +53,7 @@ pub struct Borrow<'info> {
         token::mint = asset_mint,
         token::authority = borrower
     )]
-    pub offer_asset_account: Account<'info, TokenAccount>,
+    pub vault_asset_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -95,7 +95,7 @@ impl<'info> Borrow<'info> {
     fn transfer_to_vault_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
         let cpi_accounts = Transfer {
             from: self.borrower_asset_account.to_account_info().clone(),
-            to: self.offer_asset_account.to_account_info().clone(),
+            to: self.vault_asset_account.to_account_info().clone(),
             authority: self.borrower.to_account_info().clone(),
         };
 
@@ -104,7 +104,7 @@ impl<'info> Borrow<'info> {
 
     fn set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
         let cpi_accounts = SetAuthority {
-            account_or_mint: self.offer_asset_account.to_account_info().clone(),
+            account_or_mint: self.vault_asset_account.to_account_info().clone(),
             current_authority: self.borrower.to_account_info().clone(),
         };
 

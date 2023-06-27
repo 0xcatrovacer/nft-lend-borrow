@@ -91,7 +91,7 @@ pub fn handler(ctx: Context<OfferLoan>, offer_amount: u64, _collection_id: Pubke
 
     collection.total_offers += 1;
 
-    let (offer_account_authority, _offer_account_bump) = Pubkey::find_program_address(
+    let (vault_account_authority, _offer_account_bump) = Pubkey::find_program_address(
         &[
             b"offer-token-account",
             collection.key().as_ref(),
@@ -104,7 +104,7 @@ pub fn handler(ctx: Context<OfferLoan>, offer_amount: u64, _collection_id: Pubke
     token::set_authority(
         ctx.accounts.set_authority_context(),
         AuthorityType::AccountOwner,
-        Some(offer_account_authority),
+        Some(vault_account_authority),
     )?;
 
     system_program::transfer(ctx.accounts.transfer_to_vault_context(), offer_amount)?;

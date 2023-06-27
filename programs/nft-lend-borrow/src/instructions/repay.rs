@@ -57,10 +57,10 @@ pub struct Repay<'info> {
 
     #[account(
         mut,
-        constraint = offer_asset_account.mint == asset_mint.key(),
-        constraint = offer_asset_account.owner == borrower.key()
+        constraint = vault_asset_account.mint == asset_mint.key(),
+        constraint = vault_asset_account.owner == asset_account_authority.key()
     )]
-    pub offer_asset_account: Account<'info, TokenAccount>,
+    pub vault_asset_account: Account<'info, TokenAccount>,
 
     /// CHECK: This is not dangerous
     pub asset_account_authority: AccountInfo<'info>,
@@ -76,7 +76,7 @@ pub struct Repay<'info> {
 impl<'info> Repay<'info> {
     fn transfer_asset_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
         let cpi_accounts = Transfer {
-            from: self.offer_asset_account.to_account_info().clone(),
+            from: self.vault_asset_account.to_account_info().clone(),
             to: self.borrower_asset_account.to_account_info().clone(),
             authority: self.asset_account_authority.clone(),
         };
