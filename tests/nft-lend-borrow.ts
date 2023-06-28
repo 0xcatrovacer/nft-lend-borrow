@@ -39,7 +39,7 @@ describe("nft-lend-borrow", () => {
 
     let loanDuration = 30;
 
-    it("Can initialize the state of the world!", async () => {
+    it("Can initialize the state of the world", async () => {
         const transferSig = await provider.connection.requestAirdrop(
             payer.publicKey,
             20000000000
@@ -134,5 +134,31 @@ describe("nft-lend-borrow", () => {
         );
 
         assert.strictEqual(borrowerAssetTokenAccount.amount.toString(), "1");
+    });
+
+    it("Can create pool", async () => {
+        await program.methods
+            .createPool(collectionId, new anchor.BN(loanDuration))
+            .accounts({
+                collectionPool: collectionPool,
+                authority: assetPoolAuthority.publicKey,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([assetPoolAuthority])
+            .rpc();
+
+        const createdPool = await program.account.collectionPool.fetch(
+            collectionPool
+        );
+
+        assert.strictEqual(
+            createdPool.collectionId.toBase58(),
+            collectionId.toBase58()
+        );
+        assert.strictEqual(createdPool.duration.toNumber(), loanDuration);
+        assert.strictEqual(
+            createdPool.poolOwner.toBase58(),
+            assetPoolAuthority.publicKey.toBase58()
+        );
     });
 });
