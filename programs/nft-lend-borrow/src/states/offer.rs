@@ -25,5 +25,5 @@ pub struct Offer {
 }
 
 impl Offer {
-    pub const LEN: usize = 8 + 32 + 8 + 8 + 1 + 32 + 1;
+    pub const LEN: usize = 8 + 32 + 8 + 8 + 32 + 1 + 32 + 1;
 }

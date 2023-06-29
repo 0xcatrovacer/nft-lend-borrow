@@ -7,7 +7,7 @@ use crate::states::CollectionPool;
 pub struct CreatePool<'info> {
     #[account(
         init,
-        seeds=[b"collection_pool", collection_id.key().as_ref()],
+        seeds=[b"collection-pool", collection_id.key().as_ref()],
         bump,
         payer=authority,
         space=CollectionPool::LEN

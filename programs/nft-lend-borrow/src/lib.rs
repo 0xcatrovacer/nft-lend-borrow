@@ -35,10 +35,9 @@ pub mod nft_lend_borrow {
 
     pub fn offer_loan(
         ctx: Context<OfferLoan>,
-        offer_amount: u64,
-        collection_id: Pubkey,
+        offer_amount: u64
     ) -> Result<()> {
-        instructions::offer_loan::handler(ctx, offer_amount, collection_id)
+        instructions::offer_loan::handler(ctx, offer_amount)
     }
 
     pub fn withdraw_offer(
