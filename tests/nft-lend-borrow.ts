@@ -1,6 +1,11 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import {
+    LAMPORTS_PER_SOL,
+    PublicKey,
+    SystemProgram,
+    Transaction,
+} from "@solana/web3.js";
 import {
     TOKEN_PROGRAM_ID,
     createAccount,
@@ -13,7 +18,7 @@ import { assert } from "chai";
 
 describe("nft-lend-borrow", () => {
     // Configure the client to use the local cluster.
-    const provider = anchor.AnchorProvider.local();
+    const provider = anchor.AnchorProvider.env();
     anchor.setProvider(provider);
 
     const program = anchor.workspace.NftLendBorrow as Program<NftLendBorrow>;
@@ -27,17 +32,21 @@ describe("nft-lend-borrow", () => {
     let payer = anchor.web3.Keypair.generate();
     let mintAuthority = anchor.web3.Keypair.generate();
     let assetPoolAuthority = anchor.web3.Keypair.generate();
+    let vault = anchor.web3.Keypair.generate();
 
     let lender = anchor.web3.Keypair.generate();
     let borrower = anchor.web3.Keypair.generate();
 
-    let collectionPool: PublicKey;
+    let lenderInitialBalance = 10000000000;
+    let borrowerInitialBalance = 5000000000;
+
+    let collectionPoolPDA: PublicKey;
+    let offerPDA: PublicKey;
+    let activeLoanPDA: PublicKey;
 
     let collectionId = new PublicKey(
         "J1S9H3QjnRtBbbuD4HjPV6RpRhwuk4zKbxsnCHuTgh9w"
     );
-
-    let loanDuration = 30;
 
     it("Can initialize the state of the world", async () => {
         const transferSig = await provider.connection.requestAirdrop(
@@ -69,12 +78,12 @@ describe("nft-lend-borrow", () => {
             SystemProgram.transfer({
                 fromPubkey: payer.publicKey,
                 toPubkey: lender.publicKey,
-                lamports: 15000000000,
+                lamports: lenderInitialBalance,
             }),
             SystemProgram.transfer({
                 fromPubkey: payer.publicKey,
                 toPubkey: borrower.publicKey,
-                lamports: 2000000000,
+                lamports: borrowerInitialBalance,
             })
         );
 
@@ -122,11 +131,14 @@ describe("nft-lend-borrow", () => {
 
         let [collectionPoolAddress, _collectionBump] =
             anchor.web3.PublicKey.findProgramAddressSync(
-                [Buffer.from("collection_pool"), collectionId.toBuffer()],
+                [
+                    anchor.utils.bytes.utf8.encode("collection-pool"),
+                    collectionId.toBuffer(),
+                ],
                 program.programId
             );
 
-        collectionPool = collectionPoolAddress;
+        collectionPoolPDA = collectionPoolAddress;
 
         const borrowerAssetTokenAccount = await getAccount(
             provider.connection,
@@ -136,11 +148,13 @@ describe("nft-lend-borrow", () => {
         assert.strictEqual(borrowerAssetTokenAccount.amount.toString(), "1");
     });
 
+    let loanDuration = 30;
+
     it("Can create pool", async () => {
         await program.methods
             .createPool(collectionId, new anchor.BN(loanDuration))
             .accounts({
-                collectionPool: collectionPool,
+                collectionPool: collectionPoolPDA,
                 authority: assetPoolAuthority.publicKey,
                 systemProgram: anchor.web3.SystemProgram.programId,
             })
@@ -148,7 +162,7 @@ describe("nft-lend-borrow", () => {
             .rpc();
 
         const createdPool = await program.account.collectionPool.fetch(
-            collectionPool
+            collectionPoolPDA
         );
 
         assert.strictEqual(
@@ -160,5 +174,68 @@ describe("nft-lend-borrow", () => {
             createdPool.poolOwner.toBase58(),
             assetPoolAuthority.publicKey.toBase58()
         );
+    });
+
+    let totalOffers = 0;
+    let offerAmount = new anchor.BN(2 * LAMPORTS_PER_SOL);
+
+    it("Can offer loan", async () => {
+        let [offer, _offerBump] = anchor.web3.PublicKey.findProgramAddressSync(
+            [
+                anchor.utils.bytes.utf8.encode("offer"),
+                collectionPoolPDA.toBuffer(),
+                lender.publicKey.toBuffer(),
+                Buffer.from(totalOffers.toString()),
+            ],
+            program.programId
+        );
+
+        offerPDA = offer;
+
+        await program.methods
+            .offerLoan(offerAmount)
+            .accounts({
+                offerLoan: offerPDA,
+                vaultAccount: vault.publicKey,
+                collectionPool: collectionPoolPDA,
+                lender: lender.publicKey,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([lender, vault])
+            .rpc();
+
+        const vaultAccount = await provider.connection.getAccountInfo(
+            vault.publicKey
+        );
+        const lenderAccount = await provider.connection.getAccountInfo(
+            lender.publicKey
+        );
+
+        assert.isAbove(vaultAccount.lamports, offerAmount.toNumber());
+        assert.isBelow(
+            lenderAccount.lamports,
+            lenderInitialBalance - offerAmount.toNumber()
+        );
+
+        const createdOffer = await program.account.offer.fetch(offerPDA);
+
+        assert.strictEqual(
+            createdOffer.collection.toBase58(),
+            collectionPoolPDA.toBase58()
+        );
+        assert.strictEqual(
+            createdOffer.offerLamportAmount.toNumber(),
+            offerAmount.toNumber()
+        );
+        assert.strictEqual(
+            createdOffer.repayLamportAmount.toNumber(),
+            offerAmount.toNumber() + (10 / 100) * offerAmount.toNumber()
+        );
+        assert.strictEqual(
+            createdOffer.lender.toBase58(),
+            lender.publicKey.toBase58()
+        );
+        assert.strictEqual(createdOffer.isLoanTaken, false);
     });
 });
