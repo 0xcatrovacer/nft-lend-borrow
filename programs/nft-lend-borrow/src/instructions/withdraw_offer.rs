@@ -25,12 +25,12 @@ pub struct WithdrawOffer<'info> {
     #[account(
         mut,
         seeds = [
-            b"offer-token-account", 
+            b"vault-token-account", 
             offer_loan.key().as_ref()
         ],
         bump = offer_loan.bump,
     )]
-    pub offer_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -51,7 +51,7 @@ pub struct WithdrawOffer<'info> {
 impl<'info> WithdrawOffer<'info> {
     fn transfer_to_lender_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
         let cpi_accounts = Transfer {
-            from: self.offer_token_account.to_account_info().clone(),
+            from: self.vault_token_account.to_account_info().clone(),
             to: self.lender.to_account_info().clone(),
             authority: self.lender.to_account_info().clone(),
         };
@@ -61,7 +61,7 @@ impl<'info> WithdrawOffer<'info> {
 
     fn close_account_context(&self) -> CpiContext<'_, '_, '_, 'info, CloseAccount<'info>> {
         let cpi_accounts = CloseAccount {
-            account: self.offer_token_account.to_account_info().clone(),
+            account: self.vault_token_account.to_account_info().clone(),
             destination: self.lender.to_account_info().clone(),
             authority: self.token_account_authority.clone(),
         };
@@ -85,7 +85,7 @@ pub fn handler(
 
     let (_token_account_authority, token_account_bump) = Pubkey::find_program_address(
         &[
-            b"offer-token-account",
+            b"vault-token-account",
             collection.key().as_ref(),
             ctx.accounts.lender.key().as_ref(),
             collection.total_offers.to_string().as_bytes(),
@@ -102,7 +102,7 @@ pub fn handler(
     let total_offers_bytes: &[u8] = offer_bytes.as_bytes().try_into().expect("");
 
     let authority_seeds_1: &[&[u8]] = &[
-        b"offer-token-account",
+        b"vault-token-account",
         collection_key,
         lender_key,
         total_offers_bytes,
@@ -114,7 +114,7 @@ pub fn handler(
 
     let vault_lamports_initial = ctx
         .accounts
-        .offer_token_account
+        .vault_token_account
         .to_account_info()
         .lamports();
     let transfer_amount = vault_lamports_initial

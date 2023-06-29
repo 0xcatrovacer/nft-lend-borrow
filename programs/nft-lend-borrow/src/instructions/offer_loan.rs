@@ -27,14 +27,14 @@ pub struct OfferLoan<'info> {
     #[account(
         init,
         seeds = [
-            b"offer-token-account", 
+            b"vault-token-account", 
             offer_loan.key().as_ref()
         ],
         bump,
         payer = lender,
         space=TokenAccount::LEN
     )]
-    pub offer_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -63,7 +63,7 @@ impl<'info> OfferLoan<'info> {
     ) -> CpiContext<'_, '_, '_, 'info, system_program::Transfer<'info>> {
         let cpi_accounts = system_program::Transfer {
             from: self.lender.to_account_info().clone(),
-            to: self.offer_token_account.to_account_info().clone(),
+            to: self.vault_token_account.to_account_info().clone(),
         };
 
         CpiContext::new(self.system_program.to_account_info().clone(), cpi_accounts)
@@ -71,7 +71,7 @@ impl<'info> OfferLoan<'info> {
 
     fn set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
         let cpi_accounts = SetAuthority {
-            account_or_mint: self.offer_token_account.to_account_info().clone(),
+            account_or_mint: self.vault_token_account.to_account_info().clone(),
             current_authority: self.lender.to_account_info().clone(),
         };
 
@@ -93,7 +93,7 @@ pub fn handler(ctx: Context<OfferLoan>, offer_amount: u64, _collection_id: Pubke
 
     let (vault_account_authority, _offer_account_bump) = Pubkey::find_program_address(
         &[
-            b"offer-token-account",
+            b"vault-token-account",
             collection.key().as_ref(),
             ctx.accounts.lender.key().as_ref(),
             collection.total_offers.to_string().as_bytes(),

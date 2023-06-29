@@ -35,12 +35,12 @@ pub struct Borrow<'info> {
     #[account(
         mut,
         seeds = [
-            b"offer-token-account", 
+            b"vault-token-account", 
             offer_loan.key().as_ref(),
         ],
         bump = offer_loan.bump,
     )]
-    pub offer_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Account<'info, TokenAccount>,
 
     #[account(
         init,
@@ -85,7 +85,7 @@ pub struct Borrow<'info> {
 impl<'info> Borrow<'info> {
     fn transfer_to_borrower_context(&self) -> CpiContext<'_, '_, '_, 'info, system_program::Transfer<'info>> {
         let cpi_accounts = system_program::Transfer {
-            from: self.offer_token_account.to_account_info().clone(),
+            from: self.vault_token_account.to_account_info().clone(),
             to: self.borrower.to_account_info().clone(),
         };
 
@@ -142,7 +142,7 @@ impl<'info> Borrow<'info> {
 
         let (_token_account_authority, token_account_bump) = Pubkey::find_program_address(
             &[
-                b"offer-token-account",
+                b"vault-token-account",
                 collection.key().as_ref(),
                 offer.lender.key().as_ref(),
                 collection.total_offers.to_string().as_bytes(),
@@ -159,7 +159,7 @@ impl<'info> Borrow<'info> {
         let total_offers_bytes: &[u8] = offer_bytes.as_bytes().try_into().expect("");
 
         let authority_seeds_1: &[&[u8]] = &[
-            b"offer-token-account",
+            b"vault-token-account",
             collection_key,
             lender_key,
             total_offers_bytes,
@@ -171,7 +171,7 @@ impl<'info> Borrow<'info> {
 
         let vault_lamports_initial = ctx
             .accounts
-            .offer_token_account
+            .vault_token_account
             .to_account_info()
             .lamports();
         let transfer_amount = vault_lamports_initial
@@ -180,7 +180,7 @@ impl<'info> Borrow<'info> {
 
         let (vault_account_authority, _vault_account_bump) = Pubkey::find_program_address(
             &[
-                b"offer-token-account",
+                b"vault-token-account",
                 collection.key().as_ref(),
                 offer.lender.key().as_ref(),
                 collection.total_offers.to_string().as_bytes(),

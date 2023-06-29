@@ -93,7 +93,7 @@ pub fn handler(ctx: Context<Liquidate>, _collection_id: Pubkey) -> Result<()> {
 
     let (_token_account_authority, token_account_bump) = Pubkey::find_program_address(
         &[
-        b"offer-token-account",
+        b"vault-token-account",
         collection.key().as_ref(),
         offer.lender.key().as_ref(),
         collection.total_offers.to_string().as_bytes(),
@@ -110,7 +110,7 @@ pub fn handler(ctx: Context<Liquidate>, _collection_id: Pubkey) -> Result<()> {
     let total_offers_bytes: &[u8] = offer_bytes.as_bytes().try_into().expect("");
 
     let authority_seeds_1: &[&[u8]] = &[
-    b"offer-token-account",
+    b"vault-token-account",
     collection_key,
     lender_key,
     total_offers_bytes,
