@@ -238,4 +238,49 @@ describe("nft-lend-borrow", () => {
         );
         assert.strictEqual(createdOffer.isLoanTaken, false);
     });
+
+    it("Can borrow loan", async () => {
+        let [activeLoan, _activeLoanBump] =
+            anchor.web3.PublicKey.findProgramAddressSync(
+                [
+                    anchor.utils.bytes.utf8.encode("active-loan"),
+                    offerPDA.toBuffer(),
+                ],
+                program.programId
+            );
+
+        activeLoanPDA = activeLoan;
+
+        let [vaultAsset, _vaultAssetBump] =
+            anchor.web3.PublicKey.findProgramAddressSync(
+                [
+                    anchor.utils.bytes.utf8.encode("vault-asset-account"),
+                    offerPDA.toBuffer(),
+                ],
+                program.programId
+            );
+
+        vaultAssetAccount = vaultAsset;
+
+        const minimumBalanceForRentExemption =
+            await provider.connection.getMinimumBalanceForRentExemption(8);
+
+        await program.methods
+            .borrow(new anchor.BN(minimumBalanceForRentExemption))
+            .accounts({
+                activeLoan: activeLoanPDA,
+                offerLoan: offerPDA,
+                vaultAccount: vault.publicKey,
+                vaultAssetAccount: vaultAssetAccount,
+                collectionPool: collectionPoolPDA,
+                borrower: borrower.publicKey,
+                borrowerAssetAccount: borrowerAssetAccount,
+                assetMint: assetMint,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: anchor.web3.SystemProgram.programId,
+                clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+            })
+            .signers([borrower])
+            .rpc();
+    });
 });
