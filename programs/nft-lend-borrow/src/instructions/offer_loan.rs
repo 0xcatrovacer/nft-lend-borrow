@@ -1,7 +1,7 @@
 pub use anchor_lang::prelude::*;
 
 use anchor_lang::system_program;
-use anchor_spl::token::{self, spl_token::instruction::AuthorityType, SetAuthority, Token};
+use anchor_spl::token::Token;
 
 pub use crate::states::{CollectionPool, Offer};
 
@@ -24,6 +24,13 @@ pub struct OfferLoan<'info> {
     /// CHECK: This is safe
     #[account(
         init,
+        seeds=[
+            b"vault-token-account",
+            collection_pool.key().as_ref(),
+            lender.key().as_ref(),
+            collection_pool.total_offers.to_string().as_bytes(),
+        ],
+        bump,
         payer = lender,
         space = 8
     )]
