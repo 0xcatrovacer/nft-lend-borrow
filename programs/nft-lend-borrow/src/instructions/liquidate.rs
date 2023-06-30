@@ -5,7 +5,6 @@ use crate::errors::ErrorCode;
 pub use crate::states::{Offer, ActiveLoan, CollectionPool};
 
 #[derive(Accounts)]
-#[instruction(collection_id: Pubkey)]
 pub struct Liquidate<'info> {
     #[account(
         mut,
@@ -26,11 +25,7 @@ pub struct Liquidate<'info> {
     )]
     pub offer: Box<Account<'info, Offer>>,
 
-    #[account(
-        mut,
-        seeds=[b"collection_pool", collection_id.key().as_ref()],
-        bump=collection_pool.bump
-    )]
+    #[account(mut)]
     pub collection_pool: Box<Account<'info, CollectionPool>>,
 
     #[account(
@@ -80,7 +75,7 @@ impl<'info> Liquidate<'info> {
 }
 
 #[access_control(repayment_time_over(&ctx.accounts.active_loan, &ctx.accounts.clock))]
-pub fn handler(ctx: Context<Liquidate>, _collection_id: Pubkey) -> Result<()> {
+pub fn handler(ctx: Context<Liquidate>) -> Result<()> {
     let active_loan = &mut ctx.accounts.active_loan;
     let offer = &mut ctx.accounts.offer;
     let collection = &mut ctx.accounts.collection_pool;
@@ -93,7 +88,6 @@ pub fn handler(ctx: Context<Liquidate>, _collection_id: Pubkey) -> Result<()> {
 
     let (_token_account_authority, token_account_bump) = Pubkey::find_program_address(
         &[
-        b"vault-token-account",
         collection.key().as_ref(),
         offer.lender.key().as_ref(),
         collection.total_offers.to_string().as_bytes(),
@@ -110,7 +104,6 @@ pub fn handler(ctx: Context<Liquidate>, _collection_id: Pubkey) -> Result<()> {
     let total_offers_bytes: &[u8] = offer_bytes.as_bytes().try_into().expect("");
 
     let authority_seeds_1: &[&[u8]] = &[
-    b"vault-token-account",
     collection_key,
     lender_key,
     total_offers_bytes,

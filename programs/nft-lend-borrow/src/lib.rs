@@ -59,11 +59,11 @@ pub mod nft_lend_borrow {
         instructions::borrow::handler(ctx, minimum_balance_for_rent_exemption)
     }
 
-    pub fn repay(ctx: Context<Repay>, collection_id: Pubkey) -> Result<()> {
-        instructions::repay::handler(ctx, collection_id)
+    pub fn repay(ctx: Context<Repay>) -> Result<()> {
+        instructions::repay::handler(ctx)
     }
 
-    pub fn liquidate(ctx: Context<Liquidate>, collection_id: Pubkey) -> Result<()> {
-        instructions::liquidate::handler(ctx, collection_id)
+    pub fn liquidate(ctx: Context<Liquidate>) -> Result<()> {
+        instructions::liquidate::handler(ctx)
     }
 }

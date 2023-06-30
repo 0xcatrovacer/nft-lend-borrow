@@ -3,7 +3,7 @@ pub use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use anchor_spl::token::Token;
 
-pub use crate::states::{CollectionPool, Offer};
+pub use crate::states::{CollectionPool, Offer, Vault};
 
 #[derive(Accounts)]
 pub struct OfferLoan<'info> {
@@ -21,20 +21,19 @@ pub struct OfferLoan<'info> {
     )]
     pub offer_loan: Box<Account<'info, Offer>>,
 
-    /// CHECK: This is safe
     #[account(
         init,
         seeds=[
-            b"vault-token-account",
+            b"vault",
             collection_pool.key().as_ref(),
             lender.key().as_ref(),
             collection_pool.total_offers.to_string().as_bytes(),
         ],
         bump,
         payer = lender,
-        space = 8
+        space = Vault::LEN
     )]
-    pub vault_account: AccountInfo<'info>,
+    pub vault_account: Account<'info, Vault>,
 
     #[account(mut)]
     pub collection_pool: Box<Account<'info, CollectionPool>>,
@@ -58,20 +57,12 @@ impl<'info> OfferLoan<'info> {
 
         CpiContext::new(self.system_program.to_account_info(), cpi_accounts)
     }
-
-    // fn set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
-    //     let cpi_accounts = SetAuthority {
-    //         account_or_mint: self.vault_account.to_account_info().clone(),
-    //         current_authority: self.lender.to_account_info().clone(),
-    //     };
-
-    //     CpiContext::new(self.token_program.to_account_info().clone(), cpi_accounts)
-    // }
 }
 
 pub fn handler(ctx: Context<OfferLoan>, offer_amount: u64) -> Result<()> {
     let offer_account = &mut ctx.accounts.offer_loan;
     let collection = &mut ctx.accounts.collection_pool;
+    let vault = &mut ctx.accounts.vault_account;
 
     offer_account.collection = collection.key();
     offer_account.offer_lamport_amount = offer_amount;
@@ -81,21 +72,8 @@ pub fn handler(ctx: Context<OfferLoan>, offer_amount: u64) -> Result<()> {
 
     collection.total_offers += 1;
 
-    // let (vault_account_authority, _offer_account_bump) = Pubkey::find_program_address(
-    //     &[
-    //         b"vault-token-account",
-    //         collection.key().as_ref(),
-    //         ctx.accounts.lender.key().as_ref(),
-    //         collection.total_offers.to_string().as_bytes(),
-    //     ],
-    //     ctx.program_id,
-    // );
-
-    // token::set_authority(
-    //     ctx.accounts.set_authority_context(),
-    //     AuthorityType::AccountOwner,
-    //     Some(vault_account_authority),
-    // )?;
+    vault.offer = offer_account.key();
+    vault.bump = *ctx.bumps.get("vault_account").unwrap();
 
     system_program::transfer(ctx.accounts.transfer_to_vault_context(), offer_amount)?;
 

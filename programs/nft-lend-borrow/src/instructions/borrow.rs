@@ -3,7 +3,7 @@ pub use anchor_lang::prelude::*;
 use anchor_spl::token::spl_token::instruction::AuthorityType;
 use anchor_spl::token::{self, Mint, SetAuthority, Token, TokenAccount, Transfer};
 
-use crate::states::{ActiveLoan, CollectionPool, Offer};
+use crate::states::{ActiveLoan, CollectionPool, Offer, Vault};
 
 use crate::errors::ErrorCode;
 
@@ -21,9 +21,8 @@ pub struct Borrow<'info> {
     #[account(mut)]
     pub offer_loan: Box<Account<'info, Offer>>,
 
-    /// CHECK: This is safe
     #[account(mut)]
-    pub vault_account: AccountInfo<'info>,
+    pub vault_account: Account<'info, Vault>,
 
     #[account(
         init,
@@ -107,7 +106,7 @@ pub fn handler(ctx: Context<Borrow>, minimum_balance_for_rent_exemption: u64) ->
 
     token::transfer(ctx.accounts.transfer_to_vault_context(), 1)?;
 
-    let vault_lamports_initial = ctx.accounts.vault_account.lamports();
+    let vault_lamports_initial: u64 = ctx.accounts.vault_account.to_account_info().lamports();
 
     let transfer_amount = vault_lamports_initial
         .checked_sub(minimum_balance_for_rent_exemption)
@@ -119,7 +118,11 @@ pub fn handler(ctx: Context<Borrow>, minimum_balance_for_rent_exemption: u64) ->
         Some(ctx.accounts.vault_account.key()),
     )?;
 
-    **ctx.accounts.vault_account.try_borrow_mut_lamports()? -= transfer_amount;
+    **ctx
+        .accounts
+        .vault_account
+        .to_account_info()
+        .try_borrow_mut_lamports()? -= transfer_amount;
     **ctx.accounts.borrower.try_borrow_mut_lamports()? += transfer_amount;
 
     Ok(())
