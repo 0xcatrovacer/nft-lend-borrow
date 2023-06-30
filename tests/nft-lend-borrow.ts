@@ -32,7 +32,6 @@ describe("nft-lend-borrow", () => {
     let payer = anchor.web3.Keypair.generate();
     let mintAuthority = anchor.web3.Keypair.generate();
     let assetPoolAuthority = anchor.web3.Keypair.generate();
-    let vault = anchor.web3.Keypair.generate();
 
     let lender = anchor.web3.Keypair.generate();
     let borrower = anchor.web3.Keypair.generate();
@@ -43,6 +42,7 @@ describe("nft-lend-borrow", () => {
     let collectionPoolPDA: PublicKey;
     let offerPDA: PublicKey;
     let activeLoanPDA: PublicKey;
+    let vaultPDA: PublicKey;
 
     let collectionId = new PublicKey(
         "J1S9H3QjnRtBbbuD4HjPV6RpRhwuk4zKbxsnCHuTgh9w"
@@ -189,25 +189,33 @@ describe("nft-lend-borrow", () => {
             ],
             program.programId
         );
-
         offerPDA = offer;
+
+        let [vault, _vaultBump] = anchor.web3.PublicKey.findProgramAddressSync(
+            [
+                anchor.utils.bytes.utf8.encode("vault-token-account"),
+                collectionPoolPDA.toBuffer(),
+                lender.publicKey.toBuffer(),
+                Buffer.from(totalOffers.toString()),
+            ],
+            program.programId
+        );
+        vaultPDA = vault;
 
         await program.methods
             .offerLoan(offerAmount)
             .accounts({
                 offerLoan: offerPDA,
-                vaultAccount: vault.publicKey,
+                vaultAccount: vaultPDA,
                 collectionPool: collectionPoolPDA,
                 lender: lender.publicKey,
                 tokenProgram: TOKEN_PROGRAM_ID,
                 systemProgram: anchor.web3.SystemProgram.programId,
             })
-            .signers([lender, vault])
+            .signers([lender])
             .rpc();
 
-        const vaultAccount = await provider.connection.getAccountInfo(
-            vault.publicKey
-        );
+        const vaultAccount = await provider.connection.getAccountInfo(vaultPDA);
         const lenderAccount = await provider.connection.getAccountInfo(
             lender.publicKey
         );
@@ -240,7 +248,7 @@ describe("nft-lend-borrow", () => {
     });
 
     it("Can borrow loan", async () => {
-        let [activeLoan, _activeLoanBump] =
+        let [activeloan, _activeLoanBump] =
             anchor.web3.PublicKey.findProgramAddressSync(
                 [
                     anchor.utils.bytes.utf8.encode("active-loan"),
@@ -249,7 +257,7 @@ describe("nft-lend-borrow", () => {
                 program.programId
             );
 
-        activeLoanPDA = activeLoan;
+        activeLoanPDA = activeloan;
 
         let [vaultAsset, _vaultAssetBump] =
             anchor.web3.PublicKey.findProgramAddressSync(
@@ -264,13 +272,12 @@ describe("nft-lend-borrow", () => {
 
         const minimumBalanceForRentExemption =
             await provider.connection.getMinimumBalanceForRentExemption(8);
-
         await program.methods
             .borrow(new anchor.BN(minimumBalanceForRentExemption))
             .accounts({
                 activeLoan: activeLoanPDA,
                 offerLoan: offerPDA,
-                vaultAccount: vault.publicKey,
+                vaultAccount: vaultPDA,
                 vaultAssetAccount: vaultAssetAccount,
                 collectionPool: collectionPoolPDA,
                 borrower: borrower.publicKey,
@@ -282,5 +289,67 @@ describe("nft-lend-borrow", () => {
             })
             .signers([borrower])
             .rpc();
+
+        const activeLoan = await program.account.activeLoan.fetch(
+            activeLoanPDA
+        );
+
+        assert.strictEqual(
+            activeLoan.borrower.toBase58(),
+            borrower.publicKey.toBase58()
+        );
+        assert.strictEqual(
+            activeLoan.collection.toBase58(),
+            collectionPoolPDA.toBase58()
+        );
+        assert.strictEqual(
+            activeLoan.lender.toBase58(),
+            lender.publicKey.toBase58()
+        );
+        assert.strictEqual(activeLoan.mint.toBase58(), assetMint.toBase58());
+        assert.strictEqual(
+            activeLoan.offerAccount.toBase58(),
+            offerPDA.toBase58()
+        );
+        assert.strictEqual(
+            activeLoan.repayTs.toNumber(),
+            activeLoan.loanTs.toNumber() + loanDuration
+        );
+        assert.strictEqual(activeLoan.isLiquidated, false);
+        assert.strictEqual(activeLoan.isRepaid, false);
+
+        const vaultTokenAccount = await provider.connection.getAccountInfo(
+            vaultPDA
+        );
+        const borrowerAccount = await provider.connection.getAccountInfo(
+            borrower.publicKey
+        );
+
+        const minimumBalanceForRentExemptionForOfferAccount =
+            await provider.connection.getMinimumBalanceForRentExemption(200);
+
+        assert.strictEqual(
+            vaultTokenAccount.lamports,
+            minimumBalanceForRentExemption
+        );
+        assert.isAbove(
+            borrowerAccount.lamports,
+            borrowerInitialBalance +
+                offerAmount.toNumber() -
+                (minimumBalanceForRentExemption +
+                    minimumBalanceForRentExemptionForOfferAccount * 2)
+        );
+
+        const vaultAssetTokenAccount = await getAccount(
+            provider.connection,
+            vaultAsset
+        );
+        const borrowerAssetTokenAccount = await getAccount(
+            provider.connection,
+            borrowerAssetAccount
+        );
+
+        assert.strictEqual(vaultAssetTokenAccount.amount.toString(), "1");
+        assert.strictEqual(borrowerAssetTokenAccount.amount.toString(), "0");
     });
 });
