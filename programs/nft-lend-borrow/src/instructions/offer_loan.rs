@@ -1,10 +1,7 @@
 pub use anchor_lang::prelude::*;
 
 use anchor_lang::system_program;
-use anchor_spl::token::{
-    // self, spl_token::instruction::AuthorityType, SetAuthority, 
-    Token,
-};
+use anchor_spl::token::{self, spl_token::instruction::AuthorityType, SetAuthority, Token};
 
 pub use crate::states::{CollectionPool, Offer};
 

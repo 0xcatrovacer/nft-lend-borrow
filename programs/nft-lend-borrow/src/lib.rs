@@ -54,10 +54,9 @@ pub mod nft_lend_borrow {
 
     pub fn borrow(
         ctx: Context<Borrow>,
-        minimum_balance_for_rent_exemption: u64,
-        collection_id: Pubkey,
+        minimum_balance_for_rent_exemption: u64
     ) -> Result<()> {
-        instructions::borrow::handler(ctx, minimum_balance_for_rent_exemption, collection_id)
+        instructions::borrow::handler(ctx, minimum_balance_for_rent_exemption)
     }
 
     pub fn repay(ctx: Context<Repay>, collection_id: Pubkey) -> Result<()> {

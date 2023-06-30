@@ -9,7 +9,6 @@ use crate::states::{ActiveLoan, Offer, CollectionPool};
 use crate::errors::ErrorCode;
 
 #[derive(Accounts)]
-#[instruction(collection_id: Pubkey)]
 pub struct Borrow<'info> {
     #[account(
         init,
@@ -20,32 +19,17 @@ pub struct Borrow<'info> {
     )]
     pub active_loan: Box<Account<'info, ActiveLoan>>,
 
-    #[account(
-        mut,
-        seeds = [
-            b"offer", 
-            collection_pool.key().as_ref(), 
-            offer_loan.lender.key().as_ref(), 
-            collection_pool.total_offers.to_string().as_bytes()
-        ],
-        bump = offer_loan.bump
-    )]
+    #[account(mut)]
     pub offer_loan: Box<Account<'info, Offer>>,
 
-    #[account(
-        mut,
-        seeds = [
-            b"vault-token-account", 
-            offer_loan.key().as_ref(),
-        ],
-        bump = offer_loan.bump,
-    )]
-    pub vault_token_account: Account<'info, TokenAccount>,
+    /// CHECK: This is safe
+    #[account(mut)]
+    pub vault_account: AccountInfo<'info>,
 
     #[account(
         init,
         seeds = [
-            b"offer-asset-account",
+            b"vault-asset-account",
             offer_loan.key().as_ref(),
         ],
         bump,
@@ -55,11 +39,7 @@ pub struct Borrow<'info> {
     )]
     pub vault_asset_account: Account<'info, TokenAccount>,
 
-    #[account(
-        mut,
-        seeds=[b"collection_pool", collection_id.key().as_ref()],
-        bump=collection_pool.bump
-    )]
+    #[account(mut)]
     pub collection_pool: Box<Account<'info, CollectionPool>>,
 
     #[account(mut)]
@@ -85,7 +65,7 @@ pub struct Borrow<'info> {
 impl<'info> Borrow<'info> {
     fn transfer_to_borrower_context(&self) -> CpiContext<'_, '_, '_, 'info, system_program::Transfer<'info>> {
         let cpi_accounts = system_program::Transfer {
-            from: self.vault_token_account.to_account_info().clone(),
+            from: self.vault_account.to_account_info().clone(),
             to: self.borrower.to_account_info().clone(),
         };
 
@@ -116,7 +96,6 @@ impl<'info> Borrow<'info> {
     pub fn handler(
         ctx: Context<Borrow>,
         minimum_balance_for_rent_exemption: u64,
-        _collection_id: Pubkey,
     ) -> Result<()> {
         let active_loan = &mut ctx.accounts.active_loan;
         let offer = &mut ctx.accounts.offer_loan;
@@ -140,67 +119,55 @@ impl<'info> Borrow<'info> {
         offer.borrower = ctx.accounts.borrower.key();
         offer.is_loan_taken = true;
 
-        let (_token_account_authority, token_account_bump) = Pubkey::find_program_address(
-            &[
-                b"vault-token-account",
-                collection.key().as_ref(),
-                offer.lender.key().as_ref(),
-                collection.total_offers.to_string().as_bytes(),
-            ],
-            ctx.program_id,
-        );
+        // let (_token_account_authority, token_account_bump) = Pubkey::find_program_address(
+        //     &[
+        //         b"vault-token-account",
+        //         collection.key().as_ref(),
+        //         offer.lender.key().as_ref(),
+        //         collection.total_offers.to_string().as_bytes(),
+        //     ],
+        //     ctx.program_id,
+        // );
 
-        let key = collection.key();
-        let lender = offer.lender.key();
-        let offer_bytes = collection.total_offers.to_string();
+        // let key = collection.key();
+        // let lender = offer.lender.key();
+        // let offer_bytes = collection.total_offers.to_string();
 
-        let collection_key: &[u8] = key.as_ref().try_into().expect("");
-        let lender_key: &[u8] = lender.as_ref().try_into().expect("");
-        let total_offers_bytes: &[u8] = offer_bytes.as_bytes().try_into().expect("");
+        // let collection_key: &[u8] = key.as_ref().try_into().expect("");
+        // let lender_key: &[u8] = lender.as_ref().try_into().expect("");
+        // let total_offers_bytes: &[u8] = offer_bytes.as_bytes().try_into().expect("");
 
-        let authority_seeds_1: &[&[u8]] = &[
-            b"vault-token-account",
-            collection_key,
-            lender_key,
-            total_offers_bytes,
-        ];
+        // let authority_seeds_1: &[&[u8]] = &[
+        //     b"vault-token-account",
+        //     collection_key,
+        //     lender_key,
+        //     total_offers_bytes,
+        // ];
 
-        let authority_seeds_2: &[&[u8]] = &[&[token_account_bump]];
+        // let authority_seeds_2: &[&[u8]] = &[&[token_account_bump]];
 
-        let authority_seeds = &[authority_seeds_1, authority_seeds_2];
+        // let authority_seeds = &[authority_seeds_1, authority_seeds_2];
 
         let vault_lamports_initial = ctx
             .accounts
-            .vault_token_account
-            .to_account_info()
-            .lamports();
+            .vault_account.lamports();
+
         let transfer_amount = vault_lamports_initial
             .checked_sub(minimum_balance_for_rent_exemption)
             .unwrap();
-
-        let (vault_account_authority, _vault_account_bump) = Pubkey::find_program_address(
-            &[
-                b"vault-token-account",
-                collection.key().as_ref(),
-                offer.lender.key().as_ref(),
-                collection.total_offers.to_string().as_bytes(),
-            ],
-            ctx.program_id,
-        );
 
         token::transfer(ctx.accounts.transfer_to_vault_context(), 1)?;
 
         system_program::transfer(
             ctx.accounts
-                .transfer_to_borrower_context()
-                .with_signer(&authority_seeds[..]),
+                .transfer_to_borrower_context(),
             transfer_amount,
         )?;
 
         token::set_authority(
             ctx.accounts.set_authority_context(),
             AuthorityType::AccountOwner,
-            Some(vault_account_authority),
+            Some(ctx.accounts.vault_account.key()),
         )?;
 
         Ok(())
