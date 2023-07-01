@@ -35,6 +35,7 @@ pub struct Repay<'info> {
     #[account(
         mut,
         constraint = vault_asset_account.mint == asset_mint.key(),
+        constraint = vault_asset_account.owner == vault_authority.key()
     )]
     pub vault_asset_account: Account<'info, TokenAccount>,
 
