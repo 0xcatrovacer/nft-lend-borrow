@@ -35,11 +35,14 @@ pub struct Repay<'info> {
     #[account(
         mut,
         constraint = vault_asset_account.mint == asset_mint.key(),
-        constraint = vault_asset_account.owner == vault_account.key()
     )]
     pub vault_asset_account: Account<'info, TokenAccount>,
 
+    #[account(mut)]
     pub vault_account: Account<'info, Vault>,
+
+    /// CHECK: This is not dangerous
+    pub vault_authority: AccountInfo<'info>,
 
     #[account(mut)]
     pub borrower: Signer<'info>,
@@ -69,22 +72,12 @@ pub fn handler(ctx: Context<Repay>) -> Result<()> {
 
     active_loan.is_repaid = true;
 
-    let key = collection.key();
-    let lender = offer.lender.key();
-    let offer_string = collection.total_offers.to_string();
+    let (_vault_authority, vault_auth_bump) =
+        Pubkey::find_program_address(&[collection.key().as_ref()], ctx.program_id);
 
-    let seeds_string = "vault".to_string();
-    let collection_key = key.as_ref();
-    let lender_key = lender.as_ref();
-    let total_offers_bytes = offer_string.as_bytes();
+    let col_seeds = collection.key();
 
-    let authority_seeds = &[
-        seeds_string.as_bytes(),
-        collection_key,
-        lender_key,
-        total_offers_bytes,
-        &[ctx.accounts.vault_account.bump],
-    ];
+    let authority_seeds = &[col_seeds.as_ref(), &[vault_auth_bump]];
 
     let signer = &[&authority_seeds[..]];
 
@@ -97,7 +90,7 @@ pub fn handler(ctx: Context<Repay>) -> Result<()> {
             .borrower_asset_account
             .to_account_info()
             .clone(),
-        authority: ctx.accounts.vault_account.to_account_info().clone(),
+        authority: ctx.accounts.vault_authority.clone(),
     };
 
     let cpi_ctx = CpiContext::new_with_signer(

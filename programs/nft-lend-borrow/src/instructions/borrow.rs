@@ -37,6 +37,10 @@ pub struct Borrow<'info> {
     )]
     pub vault_asset_account: Account<'info, TokenAccount>,
 
+    /// CHECK: This is not dangerous
+    #[account(mut)]
+    pub vault_authority: AccountInfo<'info>,
+
     #[account(mut)]
     pub collection_pool: Box<Account<'info, CollectionPool>>,
 
@@ -115,7 +119,7 @@ pub fn handler(ctx: Context<Borrow>, minimum_balance_for_rent_exemption: u64) ->
     token::set_authority(
         ctx.accounts.set_authority_context(),
         AuthorityType::AccountOwner,
-        Some(ctx.accounts.vault_account.key()),
+        Some(ctx.accounts.vault_authority.key()),
     )?;
 
     **ctx
