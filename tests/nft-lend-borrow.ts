@@ -149,7 +149,7 @@ describe("nft-lend-borrow", () => {
         assert.strictEqual(borrowerAssetTokenAccount.amount.toString(), "1");
     });
 
-    let loanDuration = 30;
+    let loanDuration = 10;
 
     it("Can create pool", async () => {
         await program.methods
@@ -247,6 +247,9 @@ describe("nft-lend-borrow", () => {
         );
         assert.strictEqual(createdOffer.isLoanTaken, false);
     });
+
+    let loanStartTS: number;
+    let loanRepayTS: number;
 
     it("Can borrow loan", async () => {
         let [activeloan, _activeLoanBump] =
@@ -372,28 +375,24 @@ describe("nft-lend-borrow", () => {
     });
 
     it("Can repay loan", async () => {
-        try {
-            await program.methods
-                .repay()
-                .accounts({
-                    activeLoan: activeLoanPDA,
-                    offer: offerPDA,
-                    collectionPool: collectionPoolPDA,
-                    lender: lender.publicKey,
-                    assetMint: assetMint,
-                    borrowerAssetAccount: borrowerAssetAccount,
-                    vaultAssetAccount: vaultAssetAccount,
-                    vaultAccount: vaultPDA,
-                    vaultAuthority: vaultAuthorityPDA,
-                    borrower: borrower.publicKey,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    systemProgram: anchor.web3.SystemProgram.programId,
-                })
-                .signers([borrower])
-                .rpc();
-        } catch (e) {
-            console.log(e);
-        }
+        await program.methods
+            .repay()
+            .accounts({
+                activeLoan: activeLoanPDA,
+                offer: offerPDA,
+                collectionPool: collectionPoolPDA,
+                lender: lender.publicKey,
+                assetMint: assetMint,
+                borrowerAssetAccount: borrowerAssetAccount,
+                vaultAssetAccount: vaultAssetAccount,
+                vaultAccount: vaultPDA,
+                vaultAuthority: vaultAuthorityPDA,
+                borrower: borrower.publicKey,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([borrower])
+            .rpc();
 
         const activeLoanAccount = await program.account.activeLoan.fetch(
             activeLoanPDA
@@ -431,4 +430,242 @@ describe("nft-lend-borrow", () => {
         assert.strictEqual(borrowerAssetTokenAccount.amount.toString(), "1");
         assert.strictEqual(vaultAssetTokenAccount.amount.toString(), "0");
     });
+
+    it("Can offer second loan", async () => {
+        totalOffers += 1;
+        let [offer, _offerBump] = anchor.web3.PublicKey.findProgramAddressSync(
+            [
+                anchor.utils.bytes.utf8.encode("offer"),
+                collectionPoolPDA.toBuffer(),
+                lender.publicKey.toBuffer(),
+                Buffer.from(totalOffers.toString()),
+            ],
+            program.programId
+        );
+        offerPDA = offer;
+
+        let [vault, _vaultBump] = anchor.web3.PublicKey.findProgramAddressSync(
+            [
+                anchor.utils.bytes.utf8.encode("vault"),
+                collectionPoolPDA.toBuffer(),
+                lender.publicKey.toBuffer(),
+                Buffer.from(totalOffers.toString()),
+            ],
+            program.programId
+        );
+        vaultPDA = vault;
+
+        await program.methods
+            .offerLoan(offerAmount)
+            .accounts({
+                offerLoan: offerPDA,
+                vaultAccount: vaultPDA,
+                collectionPool: collectionPoolPDA,
+                lender: lender.publicKey,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([lender])
+            .rpc();
+
+        const vaultAccount = await provider.connection.getAccountInfo(vaultPDA);
+        const lenderAccount = await provider.connection.getAccountInfo(
+            lender.publicKey
+        );
+
+        assert.approximately(
+            vaultAccount.lamports,
+            offerAmount.toNumber(),
+            0.5 * LAMPORTS_PER_SOL
+        );
+        assert.approximately(
+            lenderAccount.lamports,
+            lenderInitialBalance - offerAmount.toNumber(),
+            0.5 * LAMPORTS_PER_SOL
+        );
+
+        const createdOffer = await program.account.offer.fetch(offerPDA);
+
+        assert.strictEqual(
+            createdOffer.collection.toBase58(),
+            collectionPoolPDA.toBase58()
+        );
+        assert.strictEqual(
+            createdOffer.offerLamportAmount.toNumber(),
+            offerAmount.toNumber()
+        );
+        assert.strictEqual(
+            createdOffer.repayLamportAmount.toNumber(),
+            offerAmount.toNumber() + (10 / 100) * offerAmount.toNumber()
+        );
+        assert.strictEqual(
+            createdOffer.lender.toBase58(),
+            lender.publicKey.toBase58()
+        );
+        assert.strictEqual(createdOffer.isLoanTaken, false);
+    });
+
+    it("Can borrow second time", async () => {
+        let [activeloan, _activeLoanBump] =
+            anchor.web3.PublicKey.findProgramAddressSync(
+                [
+                    anchor.utils.bytes.utf8.encode("active-loan"),
+                    offerPDA.toBuffer(),
+                ],
+                program.programId
+            );
+
+        activeLoanPDA = activeloan;
+
+        let [vaultAsset, _vaultAssetBump] =
+            anchor.web3.PublicKey.findProgramAddressSync(
+                [
+                    anchor.utils.bytes.utf8.encode("vault-asset-account"),
+                    offerPDA.toBuffer(),
+                ],
+                program.programId
+            );
+
+        vaultAssetAccount = vaultAsset;
+
+        const minimumBalanceForRentExemption =
+            await provider.connection.getMinimumBalanceForRentExemption(41);
+        await program.methods
+            .borrow(new anchor.BN(minimumBalanceForRentExemption))
+            .accounts({
+                activeLoan: activeLoanPDA,
+                offerLoan: offerPDA,
+                vaultAccount: vaultPDA,
+                vaultAssetAccount: vaultAssetAccount,
+                vaultAuthority: vaultAuthorityPDA,
+                collectionPool: collectionPoolPDA,
+                borrower: borrower.publicKey,
+                borrowerAssetAccount: borrowerAssetAccount,
+                assetMint: assetMint,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: anchor.web3.SystemProgram.programId,
+                clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+            })
+            .signers([borrower])
+            .rpc();
+
+        const activeLoan = await program.account.activeLoan.fetch(
+            activeLoanPDA
+        );
+
+        assert.strictEqual(
+            activeLoan.borrower.toBase58(),
+            borrower.publicKey.toBase58()
+        );
+        assert.strictEqual(
+            activeLoan.collection.toBase58(),
+            collectionPoolPDA.toBase58()
+        );
+        assert.strictEqual(
+            activeLoan.lender.toBase58(),
+            lender.publicKey.toBase58()
+        );
+        assert.strictEqual(activeLoan.mint.toBase58(), assetMint.toBase58());
+        assert.strictEqual(
+            activeLoan.offerAccount.toBase58(),
+            offerPDA.toBase58()
+        );
+        assert.strictEqual(
+            activeLoan.repayTs.toNumber(),
+            activeLoan.loanTs.toNumber() + loanDuration
+        );
+        assert.strictEqual(activeLoan.isLiquidated, false);
+        assert.strictEqual(activeLoan.isRepaid, false);
+
+        const offerAccount = await program.account.offer.fetch(offerPDA);
+
+        assert.strictEqual(
+            offerAccount.borrower.toBase58(),
+            borrower.publicKey.toBase58()
+        );
+        assert.strictEqual(offerAccount.isLoanTaken, true);
+
+        loanStartTS = activeLoan.loanTs.toNumber();
+        loanRepayTS = activeLoan.repayTs.toNumber();
+
+        const vaultTokenAccount = await provider.connection.getAccountInfo(
+            vaultPDA
+        );
+        const borrowerAccount = await provider.connection.getAccountInfo(
+            borrower.publicKey
+        );
+
+        const minimumBalanceForRentExemptionForOfferAccount =
+            await provider.connection.getMinimumBalanceForRentExemption(200);
+
+        assert.strictEqual(
+            vaultTokenAccount.lamports,
+            minimumBalanceForRentExemption
+        );
+        assert.approximately(
+            borrowerAccount.lamports,
+            borrowerInitialBalance +
+                offerAmount.toNumber() -
+                (minimumBalanceForRentExemption +
+                    minimumBalanceForRentExemptionForOfferAccount),
+            0.5 * LAMPORTS_PER_SOL
+        );
+
+        const vaultAssetTokenAccount = await getAccount(
+            provider.connection,
+            vaultAssetAccount
+        );
+        const borrowerAssetTokenAccount = await getAccount(
+            provider.connection,
+            borrowerAssetAccount
+        );
+
+        assert.strictEqual(vaultAssetTokenAccount.amount.toString(), "1");
+        assert.strictEqual(borrowerAssetTokenAccount.amount.toString(), "0");
+    });
+
+    it("Can liquidate loan", async () => {
+        if (Date.now() < loanRepayTS * 1000) {
+            await sleep(loanRepayTS * 1000 - Date.now() + 3000);
+        }
+
+        await program.methods
+            .liquidate()
+            .accounts({
+                activeLoan: activeLoanPDA,
+                offer: offerPDA,
+                collectionPool: collectionPoolPDA,
+                assetMint: assetMint,
+                vaultAssetAccount: vaultAssetAccount,
+                lenderAssetAccount: lenderAssetAccount,
+                lender: lender.publicKey,
+                vaultAuthority: vaultAuthorityPDA,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+            })
+            .signers([lender])
+            .rpc();
+
+        const activeLoan = await program.account.activeLoan.fetch(
+            activeLoanPDA
+        );
+
+        assert.strictEqual(activeLoan.isLiquidated, true);
+
+        const lenderAssetTokenAccount = await getAccount(
+            provider.connection,
+            lenderAssetAccount
+        );
+        const vaultAssetTokenAccount = await getAccount(
+            provider.connection,
+            vaultAssetAccount
+        );
+
+        assert.strictEqual(lenderAssetTokenAccount.amount.toString(), "1");
+        assert.strictEqual(vaultAssetTokenAccount.amount.toString(), "0");
+    });
 });
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
