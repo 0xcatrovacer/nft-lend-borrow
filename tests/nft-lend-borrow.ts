@@ -210,7 +210,6 @@ describe("nft-lend-borrow", () => {
                 vaultAccount: vaultPDA,
                 collectionPool: collectionPoolPDA,
                 lender: lender.publicKey,
-                tokenProgram: TOKEN_PROGRAM_ID,
                 systemProgram: anchor.web3.SystemProgram.programId,
             })
             .signers([lender])
@@ -462,7 +461,6 @@ describe("nft-lend-borrow", () => {
                 vaultAccount: vaultPDA,
                 collectionPool: collectionPoolPDA,
                 lender: lender.publicKey,
-                tokenProgram: TOKEN_PROGRAM_ID,
                 systemProgram: anchor.web3.SystemProgram.programId,
             })
             .signers([lender])

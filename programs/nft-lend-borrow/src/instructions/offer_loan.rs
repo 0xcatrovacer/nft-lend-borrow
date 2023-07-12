@@ -1,7 +1,6 @@
 pub use anchor_lang::prelude::*;
 
 use anchor_lang::system_program;
-use anchor_spl::token::Token;
 
 pub use crate::states::{CollectionPool, Offer, Vault};
 
@@ -40,8 +39,6 @@ pub struct OfferLoan<'info> {
 
     #[account(mut)]
     pub lender: Signer<'info>,
-
-    pub token_program: Program<'info, Token>,
 
     pub system_program: Program<'info, System>,
 }
