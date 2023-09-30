@@ -283,6 +283,7 @@ describe("nft-lend-borrow", () => {
 
         const minimumBalanceForRentExemption =
             await provider.connection.getMinimumBalanceForRentExemption(41);
+
         await program.methods
             .borrow(new anchor.BN(minimumBalanceForRentExemption))
             .accounts({
@@ -661,6 +662,99 @@ describe("nft-lend-borrow", () => {
 
         assert.strictEqual(lenderAssetTokenAccount.amount.toString(), "1");
         assert.strictEqual(vaultAssetTokenAccount.amount.toString(), "0");
+    });
+
+    it("Can offer and withdraw loan", async () => {
+        totalOffers += 1;
+        let [offer, _offerBump] = anchor.web3.PublicKey.findProgramAddressSync(
+            [
+                anchor.utils.bytes.utf8.encode("offer"),
+                collectionPoolPDA.toBuffer(),
+                lender.publicKey.toBuffer(),
+                Buffer.from(totalOffers.toString()),
+            ],
+            program.programId
+        );
+        offerPDA = offer;
+
+        let [vault, _vaultBump] = anchor.web3.PublicKey.findProgramAddressSync(
+            [
+                anchor.utils.bytes.utf8.encode("vault"),
+                collectionPoolPDA.toBuffer(),
+                lender.publicKey.toBuffer(),
+                Buffer.from(totalOffers.toString()),
+            ],
+            program.programId
+        );
+        vaultPDA = vault;
+
+        await program.methods
+            .offerLoan(offerAmount)
+            .accounts({
+                offerLoan: offerPDA,
+                vaultAccount: vaultPDA,
+                collectionPool: collectionPoolPDA,
+                lender: lender.publicKey,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([lender])
+            .rpc();
+
+        const createdOffer = await program.account.offer.fetch(offerPDA);
+
+        assert.strictEqual(
+            createdOffer.collection.toBase58(),
+            collectionPoolPDA.toBase58()
+        );
+        assert.strictEqual(
+            createdOffer.offerLamportAmount.toNumber(),
+            offerAmount.toNumber()
+        );
+        assert.strictEqual(
+            createdOffer.repayLamportAmount.toNumber(),
+            offerAmount.toNumber() + (10 / 100) * offerAmount.toNumber()
+        );
+        assert.strictEqual(
+            createdOffer.lender.toBase58(),
+            lender.publicKey.toBase58()
+        );
+        assert.strictEqual(createdOffer.isLoanTaken, false);
+
+        const lenderAccountPreWithdraw =
+            await provider.connection.getAccountInfo(lender.publicKey);
+
+        assert.approximately(
+            lenderAccountPreWithdraw.lamports,
+            lenderInitialBalance - 2 * offerAmount.toNumber(),
+            0.5 * LAMPORTS_PER_SOL
+        );
+
+        const minimumBalanceForRentExemption =
+            await provider.connection.getMinimumBalanceForRentExemption(41);
+
+        await program.methods
+            .withdrawOffer(
+                new anchor.BN(minimumBalanceForRentExemption),
+                collectionId
+            )
+            .accounts({
+                offerLoan: offerPDA,
+                vaultAccount: vault,
+                collectionPool: collectionPoolPDA,
+                lender: lender.publicKey,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([lender])
+            .rpc();
+
+        const lenderAccountPostWithdraw =
+            await provider.connection.getAccountInfo(lender.publicKey);
+
+        assert.approximately(
+            lenderAccountPostWithdraw.lamports,
+            lenderInitialBalance - offerAmount.toNumber(),
+            0.5 * LAMPORTS_PER_SOL
+        );
     });
 });
 

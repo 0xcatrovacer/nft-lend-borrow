@@ -1,7 +1,7 @@
 pub use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-use crate::errors::ErrorCode;
+use crate::errors::ErrorCodes;
 pub use crate::states::{ActiveLoan, CollectionPool, Offer};
 
 #[derive(Accounts)]
@@ -53,7 +53,7 @@ pub fn handler(ctx: Context<Liquidate>) -> Result<()> {
     let collection = &mut ctx.accounts.collection_pool;
 
     if active_loan.is_repaid {
-        return Err(ErrorCode::LoanAlreadyRepaid.into());
+        return Err(ErrorCodes::LoanAlreadyRepaid.into());
     }
 
     active_loan.is_liquidated = true;
@@ -90,7 +90,7 @@ fn repayment_time_over<'info>(
     clock: &Sysvar<'info, Clock>,
 ) -> Result<()> {
     if !(active_loan.repay_ts < clock.unix_timestamp) {
-        return Err(ErrorCode::CannotLiquidateYet.into());
+        return Err(ErrorCodes::CannotLiquidateYet.into());
     }
 
     Ok(())

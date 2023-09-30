@@ -1,7 +1,7 @@
 pub use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum ErrorCode {
+pub enum ErrorCodes {
     #[msg("Loan Already Taken")]
     LoanAlreadyTaken,
     #[msg("Loan Already Repaid")]

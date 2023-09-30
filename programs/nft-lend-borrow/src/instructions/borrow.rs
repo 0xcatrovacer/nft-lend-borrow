@@ -1,11 +1,10 @@
 pub use anchor_lang::prelude::*;
 
-use anchor_spl::token::spl_token::instruction::AuthorityType;
-use anchor_spl::token::{self, Mint, SetAuthority, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::states::{ActiveLoan, CollectionPool, Offer, Vault};
 
-use crate::errors::ErrorCode;
+use crate::errors::ErrorCodes;
 
 #[derive(Accounts)]
 pub struct Borrow<'info> {
@@ -33,7 +32,7 @@ pub struct Borrow<'info> {
         bump,
         payer = borrower,
         token::mint = asset_mint,
-        token::authority = borrower
+        token::authority = vault_authority
     )]
     pub vault_asset_account: Account<'info, TokenAccount>,
 
@@ -74,15 +73,6 @@ impl<'info> Borrow<'info> {
 
         CpiContext::new(self.token_program.to_account_info(), cpi_accounts)
     }
-
-    fn set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
-        let cpi_accounts = SetAuthority {
-            account_or_mint: self.vault_asset_account.to_account_info().clone(),
-            current_authority: self.borrower.to_account_info().clone(),
-        };
-
-        CpiContext::new(self.token_program.to_account_info().clone(), cpi_accounts)
-    }
 }
 
 pub fn handler(ctx: Context<Borrow>, minimum_balance_for_rent_exemption: u64) -> Result<()> {
@@ -91,7 +81,7 @@ pub fn handler(ctx: Context<Borrow>, minimum_balance_for_rent_exemption: u64) ->
     let collection = &mut ctx.accounts.collection_pool;
 
     if offer.is_loan_taken == true {
-        return Err(ErrorCode::LoanAlreadyTaken.into());
+        return Err(ErrorCodes::LoanAlreadyTaken.into());
     }
 
     active_loan.collection = collection.key();
@@ -115,12 +105,6 @@ pub fn handler(ctx: Context<Borrow>, minimum_balance_for_rent_exemption: u64) ->
     let transfer_amount = vault_lamports_initial
         .checked_sub(minimum_balance_for_rent_exemption)
         .unwrap();
-
-    token::set_authority(
-        ctx.accounts.set_authority_context(),
-        AuthorityType::AccountOwner,
-        Some(ctx.accounts.vault_authority.key()),
-    )?;
 
     **ctx
         .accounts

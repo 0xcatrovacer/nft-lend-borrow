@@ -2,7 +2,7 @@ pub mod errors;
 pub mod instructions;
 pub mod states;
 
-pub use errors::ErrorCode;
+pub use errors::ErrorCodes;
 pub use instructions::*;
 pub use states::*;
 
@@ -27,12 +27,10 @@ pub mod nft_lend_borrow {
     pub fn withdraw_offer(
         ctx: Context<WithdrawOffer>,
         minimum_balance_for_rent_exemption: u64,
-        collection_id: Pubkey,
     ) -> Result<()> {
         instructions::withdraw_offer::handler(
             ctx,
             minimum_balance_for_rent_exemption,
-            collection_id,
         )
     }
 
